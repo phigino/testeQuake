@@ -1,23 +1,22 @@
 <?php
-
-ini_set('display_errors', 1);
-ini_set('display_startup_erros', 1);
-error_reporting(E_ALL);
-
-//$handle = fopen('games.log', 'r') or die('File opening failed');
-// 'games.log'
+/*
+ * Classe que lê o arquilo.log e faz a separação dos dados.
+ * @author Paulo Higino <phigino@gmail.com> 
+ * @version 0.1 
+ */
 
 class game extends banco {
 
-    private $dados;
-    private $quantPartidas = 0;
-
-    public function __construct($log) {
+    private $dados; //arquivo que recebe os dados limpos
+    private $quantPartidas = 0; //separa por partida
+    
+    //Função que inicia o processo de lentura e envia os dados para serem inseridos no banco
+    public function inicia($log) {
         $handle = fopen($log, 'r') or die('File opening failed');
         $this->getLinhaKill($handle);
-        //$this->executa($this->dados);
+        $this->executa($this->dados);
     }
-
+//Detecta onde tem morte
     private function getLinhaKill($param) {
 
         while (!feof($param)) {
@@ -31,22 +30,20 @@ class game extends banco {
             }
         }
     }
-
+    
+// verifica quando inicia um novo jogo
     private function verificaInicioJogo($dados) {
         if (stristr($dados, "InitGame")) {
             $this->quantPartidas = ++$this->quantPartidas;
             $this->dados[$this->quantPartidas]['total_kills'] = 0;
         }
     }
-
+// Pega os jogadores de cada partida
     private function getPlayers($dados) {
         if (stristr($dados, "ClientUserinfoChanged")) {
-            //this->dados[$this->quantPartidas][] = 'inicio';
+            
             $part = substr(strrchr($dados, ":"), 0);
-            $part1 = substr($part, 2);
-            //var_dump($player1);
-
-            $part2 = explode('\t\\', $part1);
+            $part1 = substr($part, 2);$part2 = explode('\t\\', $part1);
             $part3 = explode('n\\', $part2[0]);
             $indice = trim($part3[0]);
             $nome = trim($part3[1]);
@@ -54,7 +51,7 @@ class game extends banco {
             $this->dados[$this->quantPartidas]['kills'][$nome] = 0;
         }
     }
-
+// Calcula as mortes totais e a pontuação de cada jogador
     private function calculaMortes($param) {
         $dados = trim($param);
 
@@ -75,7 +72,7 @@ class game extends banco {
             ++$this->dados[$this->quantPartidas]['kills'][$part[2]];
         }
     }
-
+//Quarda o motivo da morte e a quantidade que ocorreu
     private function causaMorte($param) {
 
         if (isset($this->dados[$this->quantPartidas]['causa_morte'][$param])) {
@@ -87,11 +84,19 @@ class game extends banco {
 
 }
 
+/*
+ * Classe conecta no banco, insere dados e faz consulta.
+ * @author Paulo Higino <phigino@gmail.com> 
+ * @version 0.1 
+ */
+
 class banco {
 
     private $conexao;
-
-    public function inicia_banco() {
+    
+   
+//Conecta no banco de dados
+    public function __construct() {
         $servername = "localhost";
         $username = "c1quake";
         $password = "teste";
@@ -104,9 +109,9 @@ class banco {
             echo "Connection failed: " . $e->getMessage();
         }
     }
-
+// Prepara os dados para serem inseridos no banco de dados
     public function executa($param) {
-        $this->inicia_banco();
+       
         $cont = 0;
         foreach ($param as $value) {
             //var_dump($value);
@@ -124,27 +129,57 @@ class banco {
             ++$cont;
         }
     }
-
+//insere uma linha no banco de dados
     private function insertPartida($total, $players, $kills, $motivo, $partida) {
 
         $sql = "INSERT INTO partida (total_kills, players, kills, motivo,partida)
     VALUES ('$total', '$players', '$kills', '$motivo', '$partida' )";
-        // auth = 'manual', confirmed = 1, mnethostid = 1 Always. the others are your variables
-
+ 
         if ($this->conexao->query($sql) === TRUE) {
             echo "OKTC";
         } else {
-            ////Manage your errors
+            echo 'erro ao salvar no banco';
         }
     }
+//consulta no banco de dados as informações
+    private function select($campo, $where = 'motivo') {
 
-    public function Getresults() {
-
-        $sql = "SELECT * partida mdl_user";
+        $sql = "SELECT * FROM `partida` WHERE `$where` like '' ";
+        
         $result = $this->conexao->query($sql);
-        return $result->fetch(PDO::FETCH_ASSOC);
+        return $result->fetchAll();
     }
-
+    //Pega os dados de cada jogador
+    public function Getresults() {
+        $dados = $this->select("players");
+        foreach ($dados as $value) {
+            $result[$value["players"]]['nome'] = $value["players"];
+            $kill = (int)$value["kills"];
+            $result[$value["players"]]['kill'][] = $kill;
+            
+           
+        }
+        return $result;
+    }
+    //pega os dados do motivo das mortes por partida
+    public function getRelatorio() {
+        
+        $dados = $this->select("motivo","players");
+        foreach ($dados as $value) {
+            $result[$value['partida']]['id'] = $value['partida'];
+            $result[$value['partida']]['total'] = $value['total_kills'];
+            $result[$value['partida']]['motivo'][$value['motivo']] = $value['kills'];
+            
+        }
+        
+        return $result;
+        
+    }
 }
 
-$objeto = new game('games.log');
+//*$objeto = new game('games.log');
+/*
+ * Para inserir os dados no banco pela primeira vez
+ * $objeto = new game();
+ * $objeto->inicia('games.log');
+ */
